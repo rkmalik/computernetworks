@@ -11,7 +11,6 @@ import java.net.URL;
 import java.util.HashSet;
 import java.util.Scanner;
 
-import finalprojectclient.Client;
 
 public class Server {
 
@@ -94,7 +93,7 @@ public class Server {
 
 	public static void main(String args[]) {
 
-		ClassLoader clientPath = Client.class.getClassLoader();
+		ClassLoader clientPath = Server.class.getClassLoader();
 		String iniFile = clientPath.getResource("").getPath();
 
 		// Initialize the ini file path

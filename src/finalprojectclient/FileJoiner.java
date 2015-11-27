@@ -3,6 +3,7 @@ package finalprojectclient;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.URL;
 import java.util.HashMap;
 
 class FileJoiner {
@@ -17,20 +18,30 @@ class FileJoiner {
 
 	public void joinFiles() {
 
-		String dirName = "/home/rkmalik/work/allworkspaces/semester3/networks/outputfile/outputfile/"
-				+ String.valueOf(clientId) + "/";
+		URL location = Client.class.getProtectionDomain().getCodeSource().getLocation();
+		String dirName = location.getPath() + "output/";
 		File dir = new File(dirName);
 
 		if (!dir.exists()) {
-
 			try {
 				dir.mkdir();
 			} catch (SecurityException e) {
 				e.printStackTrace();
 			}
 		}
+		
+		dirName+=String.valueOf(clientId);
+		dir = new File(dirName); 
 
-		String fileName = dirName + "targetfile.pdf";
+		if (!dir.exists()) {
+			try {
+				dir.mkdir();
+			} catch (SecurityException e) {
+				e.printStackTrace();
+			}
+		}
+		
+		String fileName = dirName + "/targetfile.pdf";
 		File targetFile = new File(fileName);
 		FileOutputStream fos = null;
 		try {

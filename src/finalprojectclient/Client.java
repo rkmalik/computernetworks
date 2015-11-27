@@ -4,6 +4,7 @@ import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
@@ -83,7 +84,7 @@ public class Client {
 
 			} catch (IOException e) {
 				if (requiredata.size() > 0) {
-					e.printStackTrace();
+					// e.printStackTrace();
 					System.out.println("Connection is dead. Retry Again...");
 					throw new RuntimeException("Connection broke retry again.");
 				}
@@ -92,7 +93,7 @@ public class Client {
 			} finally {
 
 				try {
-					Thread.sleep(200000);
+					Thread.sleep(20000);
 				} catch (InterruptedException e) {
 					System.out.println(" Sleep Failed : " + e.getMessage());
 				}
@@ -140,11 +141,10 @@ public class Client {
 				}
 			}
 
-			try {
-				Thread.sleep(10000);
-			} catch (InterruptedException e) {
-				System.out.println(" Sleep Failed : " + e.getMessage());
-			}
+			/*
+			 * try { Thread.sleep(60000); } catch (InterruptedException e) {
+			 * System.out.println(" Sleep Failed : " + e.getMessage()); }
+			 */
 
 			System.out.println("Connected to client on port " + downloadFromClientPortId);
 
@@ -192,7 +192,7 @@ public class Client {
 					}
 				}
 
-				// dos.writeInt(-1);
+				dos.writeInt(-1);
 				System.out.println("DOWNLOADED ALL PACKETS.");
 
 			} catch (IOException e) {
@@ -207,8 +207,7 @@ public class Client {
 			}
 
 			try {
-				System.out.println("\n\n Sleep Mode..");
-				Thread.sleep(20000);
+				Thread.sleep(60000);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
@@ -266,8 +265,28 @@ public class Client {
 
 					URL location = Client.class.getProtectionDomain().getCodeSource().getLocation();
 					String outputpath = location.getPath() + "output/";
+					File dir = new File(outputpath);
+					if (!dir.exists()) {
+						try {
+							// System.out.println("Created folder " +
+							// outputpath);
+							dir.mkdir();
+						} catch (SecurityException e) {
+							e.printStackTrace();
+						}
+					}
 
-					String outputfile = outputpath + String.valueOf(packetId);
+					outputpath += String.valueOf(MY_CLIENT_ID) + "/";
+					dir = new File(outputpath);
+					if (!dir.exists()) {
+						try {
+							dir.mkdir();
+						} catch (SecurityException e) {
+							e.printStackTrace();
+						}
+					}
+
+					String outputfile = outputpath + "/" + String.valueOf(packetId);
 
 					try {
 
@@ -391,6 +410,12 @@ public class Client {
 		Thread downloadclient = new Thread(new DownloadClient(SERVER_PORT, "", MY_CLIENT_ID));
 		downloadclient.start();
 
+		try {
+			downloadclient.join();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+
 		/****** Working till Here ******/
 
 		Thread downloadHandler = new Thread(new DownloadFromPeer(DOWNLOAD_FROM_PEER, DOWNLOAD_FROM_PEER_PORT));
@@ -405,36 +430,27 @@ public class Client {
 			e.printStackTrace();
 		}
 
-		while (true) {
-			Socket soc = null;
-			try {
-				soc = listener.accept();
-				System.out.println("Created Socket on the Port : " + MY_CLIENT_PORT + " " + soc);
-				uploadHandler = new Thread(new UploadToPeer(soc, MY_CLIENT_ID, MY_CLIENT_PORT));
-				uploadHandler.run();
-				break;
-			} catch (RuntimeException e) {
-				System.out.println("Exception while sending data. Try connectioin again.");
-
-				if (requiredata.size() == 0)
-					break;
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-
-			try {
-				System.out.println("Closing the socket..");
-				soc.close();
-			} catch (IOException e) {
-				System.out.println("Failed to close the socket successfully.");
-			}
-		}
+		Socket soc = null;
 
 		try {
-			listener.close();
+			soc = listener.accept();
+			System.out.println("Created Socket on the Port : " + MY_CLIENT_PORT + " " + soc);
+			uploadHandler = new Thread(new UploadToPeer(soc, MY_CLIENT_ID, MY_CLIENT_PORT));
+			uploadHandler.run();
+		} catch (RuntimeException e) {
+			System.out.println("Exception while sending data. Try connectioin again.");
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+
+		try {
+			System.out.println("Closing the socket..");
+			soc.close();
+			listener.close();
+		} catch (IOException e) {
+			System.out.println("Failed to close the socket successfully.");
+		}
+
 
 		if (datacache.size() == TOTAL_CHUNK_COUNT) {
 			System.out.println("Joining the chunks into file...");
@@ -444,7 +460,6 @@ public class Client {
 
 		try {
 			System.out.println("Waiting to join all the workers...");
-			downloadclient.join();
 			downloadHandler.join();
 			uploadHandler.join();
 		} catch (InterruptedException e) {
@@ -452,8 +467,6 @@ public class Client {
 		}
 
 		System.out.println("Closing client " + MY_CLIENT_ID);
-
-		/****** Working till Here ******/
 
 	}
 }
