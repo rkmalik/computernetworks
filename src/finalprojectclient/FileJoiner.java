@@ -41,7 +41,7 @@ class FileJoiner {
 			}
 		}
 		
-		String fileName = dirName + "/targetfile.pdf";
+		String fileName = dirName + "/targetfile";
 		File targetFile = new File(fileName);
 		FileOutputStream fos = null;
 		try {

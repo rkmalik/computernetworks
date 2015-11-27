@@ -437,6 +437,7 @@ public class Client {
 			System.out.println("Created Socket on the Port : " + MY_CLIENT_PORT + " " + soc);
 			uploadHandler = new Thread(new UploadToPeer(soc, MY_CLIENT_ID, MY_CLIENT_PORT));
 			uploadHandler.run();
+			System.out.println("Completed the Thread.");
 		} catch (RuntimeException e) {
 			System.out.println("Exception while sending data. Try connectioin again.");
 		} catch (IOException e) {
@@ -450,13 +451,7 @@ public class Client {
 		} catch (IOException e) {
 			System.out.println("Failed to close the socket successfully.");
 		}
-
-
-		if (datacache.size() == TOTAL_CHUNK_COUNT) {
-			System.out.println("Joining the chunks into file...");
-			FileJoiner filejoiner = new FileJoiner(MY_CLIENT_ID, datacache);
-			filejoiner.joinFiles();
-		}
+		
 
 		try {
 			System.out.println("Waiting to join all the workers...");
@@ -465,6 +460,14 @@ public class Client {
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		}
+
+
+		if (datacache.size() == TOTAL_CHUNK_COUNT) {
+			System.out.println("Joining the chunks into file...");
+			FileJoiner filejoiner = new FileJoiner(MY_CLIENT_ID, datacache);
+			filejoiner.joinFiles();
+		}
+
 
 		System.out.println("Closing client " + MY_CLIENT_ID);
 
