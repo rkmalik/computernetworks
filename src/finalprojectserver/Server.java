@@ -11,7 +11,6 @@ import java.net.URL;
 import java.util.HashSet;
 import java.util.Scanner;
 
-
 public class Server {
 
 	private static int SERVER_PORT = 8000;
@@ -97,7 +96,10 @@ public class Server {
 		String iniFile = clientPath.getResource("").getPath();
 
 		// Initialize the ini file path
-		iniFile += "start.ini";
+		if (args.length == 0)
+			iniFile += "start.ini";
+		else
+			iniFile += args[0];
 
 		clientIDList = new HashSet<Integer>();
 

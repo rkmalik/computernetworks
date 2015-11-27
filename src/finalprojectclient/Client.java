@@ -7,6 +7,7 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ServerSocket;
@@ -93,7 +94,7 @@ public class Client {
 			} finally {
 
 				try {
-					Thread.sleep(20000);
+					Thread.sleep(200);
 				} catch (InterruptedException e) {
 					System.out.println(" Sleep Failed : " + e.getMessage());
 				}
@@ -123,7 +124,7 @@ public class Client {
 		}
 
 		public void run() {
-			int millisec = 1000;
+			int millisec = 100;
 			while (true) {
 				millisec += millisec;
 				try {
@@ -157,6 +158,7 @@ public class Client {
 
 				while (requiredata.size() > 0) {
 
+					System.out.println("\n--------------------------------");
 					try {
 						Thread.sleep(1000);
 					} catch (InterruptedException e) {
@@ -207,7 +209,7 @@ public class Client {
 			}
 
 			try {
-				Thread.sleep(60000);
+				Thread.sleep(600);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
@@ -287,6 +289,9 @@ public class Client {
 					}
 
 					String outputfile = outputpath + "/" + String.valueOf(packetId);
+					String summaryFilePath = outputpath+"/"+"summary.txt";
+					FileWriter summaryFileWriter = new FileWriter(new File (summaryFilePath), true);
+					
 
 					try {
 
@@ -304,10 +309,12 @@ public class Client {
 						}
 
 						System.out.println("DOWNLOADED : ChunkID " + packetId + " with size " + bytearray.length);
+						String summary = String.format("%20s%30d\n", packetId, bytearray.length);
 						bos.write(bytearray);
 
 						ids.add(packetId);
 						datacache.put(packetId, new Data(bytearray));
+						summaryFileWriter.write(summary);
 
 						try {
 							fos.close();
@@ -319,6 +326,8 @@ public class Client {
 					} catch (IOException e) {
 						e.printStackTrace();
 					}
+					
+					summaryFileWriter.close();
 				}
 
 				for (int i = ids.size() - 1; i >= 0; i--) {
