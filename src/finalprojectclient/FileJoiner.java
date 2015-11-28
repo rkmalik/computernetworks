@@ -5,13 +5,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 class FileJoiner {
 
 	private int clientId;
-	private HashMap<Integer, Data> datacache;
+	private ConcurrentHashMap<Integer, Data> datacache;
 
-	public FileJoiner(int clientId, HashMap<Integer, Data> datacache) {
+	public FileJoiner(int clientId, ConcurrentHashMap<Integer, Data> datacache) {
 		this.clientId = clientId;
 		this.datacache = datacache;
 	}

@@ -15,8 +15,12 @@ import java.net.Socket;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Client {
 
@@ -31,14 +35,19 @@ public class Client {
 
 	private static int TOTAL_CHUNK_COUNT;
 
-	private static HashMap<Integer, Data> datacache = new HashMap<Integer, Data>();
-	private static LinkedList<Integer> requiredata = new LinkedList<Integer>();
+	private static String summaryFilePath = null;
+
+	private static ConcurrentHashMap<Integer, Data> datacache = new ConcurrentHashMap<Integer, Data>();
+	private static HashSet<Integer> requiredata = new HashSet<Integer>();
+	private static HashSet<Integer> peerList = new HashSet<Integer>();
 
 	static class UploadToPeer implements Runnable {
 
 		private Socket socket;
 		private int clientId;
 		private int clientPortID;
+		private DataOutputStream dos = null;
+		private DataInputStream dis = null;
 
 		public UploadToPeer(Socket socket, int clientId, int clientPortId) {
 			this.socket = socket;
@@ -46,9 +55,45 @@ public class Client {
 			this.clientPortID = clientPortId;
 		}
 
+		private void processPacketRequest() {
+			try {
+				int requestedPacketId = dis.readInt();
+				System.out.println("RECEIVED request for CHUNK " + requestedPacketId);
+				Data data = datacache.get(requestedPacketId);
+				if (data != null) {
+					byte byteBuffer[] = data.getData();
+					dos.writeInt(requestedPacketId);
+					System.out.println("UPLOADED " + requestedPacketId);
+					dos.writeInt(byteBuffer.length);
+					dos.write(byteBuffer);
+				} else {
+					System.out.println("CHUNK " + requestedPacketId + " not available.");
+					dos.writeInt(-1);
+				}
+				dos.flush();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		private void processPacketList() {
+			try {
+				int size = datacache.size();
+				dos.writeInt(size);
+				int i = 0;
+				for (int packetId : datacache.keySet()) {
+					dos.writeInt(packetId);
+					if (i == size - 1) {
+						System.out.println("Size : " + size + " i " + i);
+						break;
+					}
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
 		public void run() {
-			DataOutputStream dos = null;
-			DataInputStream dis = null;
 
 			System.out.print("Ready to Upload the data to the Peer....");
 
@@ -63,24 +108,33 @@ public class Client {
 						System.out.println(" Sleep Failed : " + e.getMessage());
 					}
 
-					int requestedPacketId = dis.readInt();
+					/**
+					 * This protocol consists of 3 different type of messaages
+					 * from the client.
+					 * 
+					 * 1. The request value can be -1 that means that the client
+					 * has got all the packets and it don't need any further
+					 * packet.
+					 * 
+					 * 2. The request value can be -2 that means the client need
+					 * the list of packets server is having. In that condition,
+					 * server will send all list of all the packets.
+					 * 
+					 * 
+					 * 3. The request will be -3 the client requests a
+					 * particular packet with specific packet Id.
+					 * 
+					 */
 
-					if (requestedPacketId == -1)
+					int requestedType = dis.readInt();
+
+					if (requestedType == -1) {
 						break;
-
-					System.out.println("RECEIVED request for CHUNK " + requestedPacketId);
-					Data data = datacache.get(requestedPacketId);
-					if (data != null) {
-						byte byteBuffer[] = data.getData();
-						dos.writeInt(requestedPacketId);
-						System.out.println("UPLOADED " + requestedPacketId);
-						dos.writeInt(byteBuffer.length);
-						dos.write(byteBuffer);
-					} else {
-						System.out.println("CHUNK " + requestedPacketId + " not available.");
-						dos.writeInt(-1);
+					} else if (requestedType == -2) {
+						processPacketList();
+					} else if (requestedType == -3) {
+						processPacketRequest();
 					}
-					dos.flush();
 				}
 
 			} catch (IOException e) {
@@ -114,6 +168,8 @@ public class Client {
 
 		private int downloadFromClientId;
 		private int downloadFromClientPortId;
+		private DataInputStream dis = null;
+		private DataOutputStream dos = null;
 
 		private Socket socket;
 		private static final int CHUNK_SIZE = 100000;
@@ -121,6 +177,90 @@ public class Client {
 		public DownloadFromPeer(int peerId, int portId) {
 			this.downloadFromClientId = peerId;
 			this.downloadFromClientPortId = portId;
+		}
+
+		private void getPeerChunkList() {
+
+			System.out.println("\n\nRequested CHUNK list");
+			try {
+
+				dos.writeInt(-2);
+				int size = dis.readInt();
+				System.out.println("Received following CHUNK list");
+
+				for (int i = 0; i < size; i++) {
+					int packetId = dis.readInt();
+					peerList.add(packetId);
+					System.out.print(packetId + ", ");
+				}
+				System.out.println("\n\n");
+
+				ArrayList<Integer> removeList = new ArrayList<Integer>();
+				for (int id : peerList) {
+					if (!requiredata.contains(id))
+						removeList.add(id);
+				}
+
+				peerList.removeAll(removeList);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		private void downloadPeerChunks() {
+			FileWriter summaryFileWriter = null;
+
+			try {
+				summaryFileWriter = new FileWriter(new File(summaryFilePath), true);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+			for (int requestedPacketId : peerList) {
+
+				try {
+
+					dos.writeInt(-3);
+					dos.writeInt(requestedPacketId);
+					System.out.println("SENT request for CHUNK " + requestedPacketId);
+
+					int receivedPacketId = dis.readInt();
+
+					if (receivedPacketId >= 0 && receivedPacketId == requestedPacketId) {
+						int receivedPacketSize = dis.readInt();
+						int size = receivedPacketSize;
+						byte[] bytearray = new byte[size];
+						int offset = 0;
+						while (size > 0) {
+							int bytesread = dis.read(bytearray, offset, size);
+							offset += bytesread;
+							size -= bytesread;
+						}
+
+						// requiredata.remove(requestedPacketId);
+						datacache.put(receivedPacketId, new Data(bytearray));
+						String summary = String.format("%20s%30d\n", receivedPacketId, bytearray.length);
+						summaryFileWriter.write(summary);
+						requiredata.remove(receivedPacketId);
+						System.out.println("DOWNLOADED : " + receivedPacketId);
+						System.out.println("Remaining chunks to DOWNLOAD : " + requiredata.size());
+
+					} else {
+						// requiredata.addLast(requestedPacketId);
+						System.out.println("DOWNLOAD : Peer " + downloadFromClientId + " don't have "
+								+ requestedPacketId + " packet.");
+					}
+
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+			try {
+				summaryFileWriter.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
 		}
 
 		public void run() {
@@ -142,15 +282,7 @@ public class Client {
 				}
 			}
 
-			/*
-			 * try { Thread.sleep(60000); } catch (InterruptedException e) {
-			 * System.out.println(" Sleep Failed : " + e.getMessage()); }
-			 */
-
 			System.out.println("Connected to client on port " + downloadFromClientPortId);
-
-			DataInputStream dis = null;
-			DataOutputStream dos = null;
 
 			try {
 				dis = new DataInputStream(socket.getInputStream());
@@ -165,33 +297,10 @@ public class Client {
 						System.out.println(" Sleep Failed : " + e.getMessage());
 					}
 
-					int requestedPacketId = requiredata.remove(0);
-					System.out.println("SENT request for CHUNK " + requestedPacketId);
-					dos.writeInt(requestedPacketId);
+					getPeerChunkList();
 
-					int receivedPacketId = dis.readInt();
+					downloadPeerChunks();
 
-					if (receivedPacketId >= 0 && receivedPacketId == requestedPacketId) {
-						int receivedPacketSize = dis.readInt();
-						int size = receivedPacketSize;
-						byte[] bytearray = new byte[size];
-						int offset = 0;
-						while (size > 0) {
-							int bytesread = dis.read(bytearray, offset, size);
-							offset += bytesread;
-							size -= bytesread;
-						}
-
-						// requiredata.remove(requestedPacketId);
-						datacache.put(receivedPacketId, new Data(bytearray));
-						System.out.println("DOWNLOADED : " + receivedPacketId);
-						System.out.println("Remaining chunks to DOWNLOAD : " + requiredata.size());
-
-					} else {
-						requiredata.addLast(requestedPacketId);
-						System.out.println("DOWNLOAD : Peer " + downloadFromClientId + " don't have "
-								+ requestedPacketId + " packet.");
-					}
 				}
 
 				dos.writeInt(-1);
@@ -260,38 +369,39 @@ public class Client {
 				}
 
 				ArrayList<Integer> ids = new ArrayList<Integer>();
+
+				URL location = Client.class.getProtectionDomain().getCodeSource().getLocation();
+				String outputpath = location.getPath() + "output/";
+				File dir = new File(outputpath);
+				if (!dir.exists()) {
+					try {
+						// System.out.println("Created folder " +
+						// outputpath);
+						dir.mkdir();
+					} catch (SecurityException e) {
+						e.printStackTrace();
+					}
+				}
+
+				outputpath += String.valueOf(MY_CLIENT_ID) + "/";
+				dir = new File(outputpath);
+				if (!dir.exists()) {
+					try {
+						dir.mkdir();
+					} catch (SecurityException e) {
+						e.printStackTrace();
+					}
+				}
+
+				summaryFilePath = outputpath + "/" + "summary.txt";
+				FileWriter summaryFileWriter = new FileWriter(new File(summaryFilePath), true);
+
 				for (int i = 0; i < chunksToDownload; i++) {
 
 					int packetId = dis.readInt();
 					int size = dis.readInt();
 
-					URL location = Client.class.getProtectionDomain().getCodeSource().getLocation();
-					String outputpath = location.getPath() + "output/";
-					File dir = new File(outputpath);
-					if (!dir.exists()) {
-						try {
-							// System.out.println("Created folder " +
-							// outputpath);
-							dir.mkdir();
-						} catch (SecurityException e) {
-							e.printStackTrace();
-						}
-					}
-
-					outputpath += String.valueOf(MY_CLIENT_ID) + "/";
-					dir = new File(outputpath);
-					if (!dir.exists()) {
-						try {
-							dir.mkdir();
-						} catch (SecurityException e) {
-							e.printStackTrace();
-						}
-					}
-
 					String outputfile = outputpath + "/" + String.valueOf(packetId);
-					String summaryFilePath = outputpath+"/"+"summary.txt";
-					FileWriter summaryFileWriter = new FileWriter(new File (summaryFilePath), true);
-					
 
 					try {
 
@@ -312,7 +422,8 @@ public class Client {
 						String summary = String.format("%20s%30d\n", packetId, bytearray.length);
 						bos.write(bytearray);
 
-						ids.add(packetId);
+						// ids.add(packetId);
+						requiredata.remove(packetId);
 						datacache.put(packetId, new Data(bytearray));
 						summaryFileWriter.write(summary);
 
@@ -326,14 +437,13 @@ public class Client {
 					} catch (IOException e) {
 						e.printStackTrace();
 					}
-					
-					summaryFileWriter.close();
 				}
+				summaryFileWriter.close();
 
-				for (int i = ids.size() - 1; i >= 0; i--) {
-					int id = ids.get(i);
-					requiredata.remove(id);
-				}
+				/*
+				 * for (int i = ids.size() - 1; i >= 0; i--) { int id =
+				 * ids.get(i); requiredata.remove(id); }
+				 */
 			} catch (UnknownHostException e) {
 				e.printStackTrace();
 			} catch (IOException e) {
@@ -460,7 +570,6 @@ public class Client {
 		} catch (IOException e) {
 			System.out.println("Failed to close the socket successfully.");
 		}
-		
 
 		try {
 			System.out.println("Waiting to join all the workers...");
@@ -470,13 +579,11 @@ public class Client {
 			e.printStackTrace();
 		}
 
-
 		if (datacache.size() == TOTAL_CHUNK_COUNT) {
 			System.out.println("Joining the chunks into file...");
 			FileJoiner filejoiner = new FileJoiner(MY_CLIENT_ID, datacache);
 			filejoiner.joinFiles();
 		}
-
 
 		System.out.println("Closing client " + MY_CLIENT_ID);
 
