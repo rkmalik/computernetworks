@@ -580,7 +580,7 @@ public class Client {
 		}
 
 		if (datacache.size() == TOTAL_CHUNK_COUNT) {
-			System.out.println("Joining the chunks into file...");
+			
 			FileJoiner filejoiner = new FileJoiner(MY_CLIENT_ID, datacache);
 			filejoiner.joinFiles();
 		}

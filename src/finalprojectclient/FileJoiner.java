@@ -43,6 +43,7 @@ class FileJoiner {
 		}
 		
 		String fileName = dirName + "/targetfile";
+		System.out.println("Joining the chunks into file - " + fileName);
 		File targetFile = new File(fileName);
 		FileOutputStream fos = null;
 		try {
@@ -53,6 +54,7 @@ class FileJoiner {
 			}
 			
 			System.out.println("Created OUPUTFILE with size : " + targetFile.length());
+			fos.close();
 
 		} catch (IOException e) {
 			e.printStackTrace();
